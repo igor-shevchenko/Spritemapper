@@ -110,6 +110,8 @@ op.add_option("-v", "--verbose", action="store_true",
 #              help="keep CSS parsing results in memory")
 #op.add_option("--anneal", type=int, metavar="N", default=9200,
 #              help="simulated anneal steps (default: 9200)")
+op.add_option("--no-optimization", action="store_true", dest="no_optimization", default=False,
+              help="speed up the sprite generation by skipping all optimization. Useful during development.")
 op.set_default("in_memory", False)
 op.set_default("anneal", None)
 
@@ -138,6 +140,8 @@ def main():
         base["anneal_steps"] = opts.anneal
     if opts.padding:
         base["padding"] = (opts.padding, opts.padding)
+    if opts.no_optimization:
+        base["anneal_steps"] = 1
 
     conf = CSSConfig(base=base)
     spritemap([css_cls.open_file(fn, conf=conf) for fn in args], conf=conf)
