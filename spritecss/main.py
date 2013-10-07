@@ -141,7 +141,7 @@ def main():
     if opts.padding:
         base["padding"] = (opts.padding, opts.padding)
     if opts.no_optimization:
-        base["anneal_steps"] = 1
+        base["anneal_steps"] = 100
 
     conf = CSSConfig(base=base)
     spritemap([css_cls.open_file(fn, conf=conf) for fn in args], conf=conf)
