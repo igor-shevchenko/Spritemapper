@@ -276,7 +276,9 @@ class CSSParseState(object):
                           counter=self.counter, prev=self)
 
     def leave(self):
-        return self.prev(token=self.token)
+        if self.prev:
+            return self.prev(token=self.token)
+        return self(handler=None, declaration="", selector="")
 
     def update(self, **kwds):
         for (nam, val) in kwds.iteritems():
@@ -488,24 +490,42 @@ class CSSParser(EventStream):
             if st.declaration:
                 self.push(Declaration(st))
             self.push(BlockEnd(st))
-            return st(handler=None, declaration="", selector="")
+            return st.leave()
         elif lex == "w":
             return st.sub(self._handle_whitespace)
 
     def _handle_at_rule(self, st):
-        for tok in st.iter_tokens(("char", "w")):
-            st.at_rule += tok.value
+        if not st.at_rule:
+            for tok in st.iter_tokens(("char", "w")):
+                st.at_rule += tok.value
+        else:
+            for tok in st.iter_tokens(("w",)):
+                st.at_rule += tok.value
+
+            lex = st.lexeme
+
+            if lex == "block_end":
+                self.push(BlockEnd(st))
+                st.at_rule = ""
+                return st.leave()
+
+            st = st.sub(self._handle_selector)
+            return st.handler(st)
 
         lex = st.lexeme
+
         if lex in ("block_begin", "semicolon"):
             if lex == "block_begin":
                 self.push(AtBlock(st))
-                return st(handler=self._handle_declaration, at_rule="")
+                return st.sub(self._handle_selector)
             elif lex == "semicolon":
                 self.push(AtStatement(st))
                 return st(handler=None, at_rule="")
         elif lex == "comment_begin":
             return st.sub(self._handle_comment)
+        elif lex == "block_end":
+            self.push(BlockEnd(st))
+            return st.leave()
 
     def _handle_whitespace(self, st):
         for tok in st.iter_tokens(("w",)):
@@ -522,7 +542,7 @@ class CSSParser(EventStream):
 def iter_print_css(parser):
     for event in parser:
         if event.lexeme == "comment":
-            yield "/*{0}*/".format(event.comment)
+            yield u"/*{0}*/".format(event.comment)
         elif event.lexeme == "selector":
             yield event.selector + "{"
         elif event.lexeme == "declaration":
