@@ -11,6 +11,7 @@ from spritecss.finder import find_sprite_refs
 from spritecss.mapper import SpriteMapCollector, mapper_from_conf
 from spritecss.packing import PackedBoxes, print_packed_size
 from spritecss.packing.sprites import open_sprites
+from spritecss.packing.naive import naive_packing
 from spritecss.stitch import stitch
 from spritecss.replacer import SpriteReplacer
 
@@ -81,14 +82,20 @@ def spritemap(css_fs, conf=None, out=sys.stderr):
     for smap in smaps:
         with open_sprites(smap, pad=conf.padding) as sprites:
             w_ln("packing sprites in mapping %s" % (smap.fname,))
-            logger.debug("annealing %s in steps of %d",
-                         smap.fname, conf.anneal_steps)
-            packed = PackedBoxes(sprites, anneal_steps=conf.anneal_steps)
-            print_packed_size(packed)
-            sm_plcs.append((smap, packed.placements))
+
+            if conf.packer == 'annealing':
+                logger.debug("annealing %s in steps of %d",
+                             smap.fname, conf.anneal_steps)
+                packed = PackedBoxes(sprites, anneal_steps=conf.anneal_steps)
+                print_packed_size(packed)
+                sm_plcs.append((smap, packed.placements))
+                im = stitch(packed)
+
+            elif conf.packer == 'naive':
+                im, placements = naive_packing(sprites)
+                sm_plcs.append((smap, placements))
 
             w_ln("writing spritemap image at %s" % (smap.fname,))
-            im = stitch(packed)
             with open(smap.fname, "wb") as fp:
                 im.save(fp)
 
