@@ -78,6 +78,10 @@ class CSSConfig(object):
             return bool(rv)
 
     @property
+    def packer(self):
+        return self._data.get("packer", 'naive')
+
+    @property
     def padding(self):
         return self._data.get("padding", (1, 1))
 
