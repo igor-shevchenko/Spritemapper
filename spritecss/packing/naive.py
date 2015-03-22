@@ -1,5 +1,4 @@
 import logging
-import operator
 import itertools
 
 from spritecss.image import Image
@@ -59,7 +58,7 @@ class SmallLengthReduction(object):
             logger.debug("Collapse all smaller than %s => %s",
                          by_length[i][0], packing.area)
             packings.append(packing)
-        best = min(packings, key=operator.attrgetter('area'))
+        best = min(packings, key=self.get_packing_area)
         logger.info("small_length_reduction: Best is area %s", best.area)
         return best
 
@@ -107,7 +106,7 @@ class SmallLengthReduction(object):
             p = self.packing_for_depth(by_length, depth)
             depth = self.get_packing_depth(p) - 1
             packings.append(p)
-        best = min(packings, key=operator.attrgetter('area'))
+        best = min(packings, key=self.get_packing_area)
         logger.debug(
             "%s: Tried %s depth thresholds between %s and %s; best is %s",
             type(self).__name__, len(packings), min_depth, max_depth,
@@ -119,6 +118,9 @@ class SmallLengthReduction(object):
 
     def get_depth(self, im):
         raise NotImplementedError
+
+    def get_packing_area(self, packing):
+        return packing.area
 
     def get_packing_depth(self, packing):
         raise NotImplementedError
