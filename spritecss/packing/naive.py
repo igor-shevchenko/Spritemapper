@@ -19,9 +19,9 @@ class Packing(object):
         self.xs = [x - left for x in xs]
         self.ys = [y - top for y in ys]
 
-        self.height = max(y + im.outer_height
+        self.height = max(y + im.height
                           for y, im in zip(self.ys, self.sprites))
-        self.width = max(x + im.outer_width
+        self.width = max(x + im.width
                          for x, im in zip(self.xs, self.sprites))
         self.area = self.width * self.height
 
