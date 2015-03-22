@@ -32,6 +32,18 @@ class Packing(object):
     def __iter__(self):
         return iter(zip(zip(self.xs, self.ys), self.sprites))
 
+    def render(self):
+        meta = {"bitdepth": 8, "alpha": True}
+        rows = [bytearray((self.width * 4)) for i in range(self.height)]
+        for (x, y), sprite in self:
+            pixel_rows = sprite.im.pixels
+            for i, pixels in enumerate(pixel_rows):
+                row = rows[y + i]
+                a1 = x * 4
+                a2 = a1 + len(pixels)
+                row[a1:a2] = pixels
+        return Image(self.width, self.height, rows, meta)
+
 
 def pack_rows(by_length, length_attr, depth_attr):
     def bins_for_depth(depth):
@@ -110,22 +122,9 @@ def small_length_reduction(sprites, length_attr, depth_attr):
     return best
 
 
-def render_packing(packing):
-    meta = {"bitdepth": 8, "alpha": True}
-    rows = [bytearray((packing.width * 4)) for i in range(packing.height)]
-    for (x, y), sprite in packing:
-        pixel_rows = sprite.im.pixels
-        for i, pixels in enumerate(pixel_rows):
-            row = rows[y + i]
-            a1 = x * 4
-            a2 = a1 + len(pixels)
-            row[a1:a2] = pixels
-    return Image(packing.width, packing.height, rows, meta)
-
-
 def naive_packing(sprites):
     p1 = small_length_reduction(sprites, 'outer_height', 'outer_width')
     p2 = small_length_reduction(sprites, 'outer_width', 'outer_height')
     packing = min(p1, p2, key=operator.attrgetter('area'))
-    im = render_packing(list(packing))
+    im = packing.render()
     return im, list(packing)
