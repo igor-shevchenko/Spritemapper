@@ -1,7 +1,10 @@
+import logging
 import operator
 import itertools
 
-from ..image import Image
+from spritecss.image import Image
+
+logger = logging.getLogger('spritecss')
 
 
 class Packing(object):
@@ -76,12 +79,11 @@ def pack_rows(by_length, length_attr, depth_attr):
     while depth >= min_depth:
         p = packing_for_depth(depth)
         p_depth = getattr(p, depth_attr)
-        # print("Computed packing for %s %s" % (depth_attr, p_depth))
         depth = p_depth - 1
         packings.append(p)
     best = min(packings, key=operator.attrgetter('area'))
-    print("pack_rows: Best is %s %s at area %s" %
-          (depth_attr, getattr(best, depth_attr), best.area))
+    logger.debug("pack_rows: Best is %s %s at area %s",
+                 depth_attr, getattr(best, depth_attr), best.area)
     return best
 
 
@@ -99,11 +101,11 @@ def small_length_reduction(sprites, length_attr, depth_attr):
         collapsed_by_length = ([(by_length[i][0], collapsed)] +
                                by_length[i + 1:])
         packing = pack_rows(collapsed_by_length, length_attr, depth_attr)
-        print("Collapse all smaller than %s => %s" %
-              (by_length[i][0], packing.area))
+        logger.debug("Collapse all smaller than %s => %s",
+                     by_length[i][0], packing.area)
         packings.append(packing)
     best = min(packings, key=operator.attrgetter('area'))
-    print("small_length_reduction: Best is area %s" % (best.area,))
+    logger.info("small_length_reduction: Best is area %s", best.area)
     return best
 
 
