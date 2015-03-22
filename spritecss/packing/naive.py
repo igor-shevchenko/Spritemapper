@@ -1,163 +1,125 @@
-import re
 import operator
 import itertools
-import collections
 
 from ..image import Image
 
 
-InputImageBase = collections.namedtuple(
-    'InputImage', 'image width height'.split())
-
-
-class InputImage(InputImageBase):
-    dimensions = property(lambda self: (self.width, self.height))
-    area = property(lambda self: self.width * self.height)
-
-
-Position = collections.namedtuple('Position', 'left top'.split())
-
-
-class PackedImage(object):
-    def __init__(self, im, pos):
-        self._im = im
-        self._pos = pos
-
-    def __getattr__(self, attr):
-        try:
-            return getattr(self._im, attr)
-        except AttributeError:
-            return getattr(self._pos, attr)
-
-    right = property(lambda self: self.left + self.width)
-    bottom = property(lambda self: self.top + self.height)
-
-
-def histogram(xs, attr):
-    key = operator.attrgetter(attr)
-    xs = sorted(xs, key=key)
-    return [(k, list(vs)) for k, vs in itertools.groupby(xs, key=key)]
-
-
 class Packing(object):
-    def __init__(self, sprites):
-        self.sprites = sprites
-        self.input_area = sum(im.area for im in sprites)
-        self.top = min(im.top for im in sprites)
-        self.left = min(im.left for im in sprites)
-        self.bottom = max(im.bottom for im in sprites)
-        self.right = max(im.right for im in sprites)
-        self.width = self.right - self.left
-        self.height = self.bottom - self.top
+    def __init__(self, packing):
+        placements, self.sprites = zip(*packing)
+        self.input_area = sum(im.outer_width * im.outer_height
+                              for im in self.sprites)
+
+        # Offset such that top left image is (0, 0)
+        xs, ys = zip(*placements)
+        top = min(ys)
+        left = min(xs)
+        self.xs = [x - left for x in xs]
+        self.ys = [y - top for y in ys]
+
+        self.height = max(y + im.outer_height
+                          for y, im in zip(self.ys, self.sprites))
+        self.width = max(x + im.outer_width
+                         for x, im in zip(self.xs, self.sprites))
         self.area = self.width * self.height
 
+    outer_width = property(lambda self: self.width)
+    outer_height = property(lambda self: self.height)
 
-def pack_rows(by_height):
-    def bins_for_width(width):
+    def __iter__(self):
+        return iter(zip(zip(self.xs, self.ys), self.sprites))
+
+
+def pack_rows(by_length, length_attr, depth_attr):
+    def bins_for_depth(depth):
         bins = []
-        for height, ims in by_height:
+        for length, ims in by_length:
             row = None
             rows = []
-            row_width = width
+            row_depth = depth
             for im in ims:
-                if row_width + im.width > width:
+                if row_depth + getattr(im, depth_attr) > depth:
                     row = []
                     rows.append(row)
-                    row_width = 0
+                    row_depth = 0
                 row.append(im)
-                row_width += im.width
-            bins.append((height, rows))
+                row_depth += getattr(im, depth_attr)
+            bins.append((length, rows))
         return bins
 
-    def packing_for_width(width):
-        bins = bins_for_width(width)
+    def packing_for_depth(depth):
+        bins = bins_for_depth(depth)
         packing = []
         y = 0
-        for height, rows in bins:
+        for length, rows in bins:
             for row in rows:
                 x = 0
-                max_height = 0
+                max_length = 0
                 for im in row:
-                    packing.append(PackedImage(im, Position(x, y)))
-                    max_height = max(max_height, im.height)
-                    x += im.width
-                y += max_height
+                    if 'height' in length_attr:
+                        placement = (x, y)
+                    else:
+                        placement = (y, x)
+                    packing.append((placement, im))
+                    max_length = max(max_length, getattr(im, length_attr))
+                    x += getattr(im, depth_attr)
+                y += max_length
         return Packing(packing)
 
-    min_width = max(im.width for h, ims in by_height for im in ims)
-    max_width = max(sum(im.width for im in ims) for h, ims in by_height)
+    min_depth = max(getattr(im, depth_attr)
+                    for l, ims in by_length for im in ims)
+    max_depth = max(sum(getattr(im, depth_attr) for im in ims)
+                    for l, ims in by_length)
 
-    width = max_width
+    depth = max_depth
     packings = []
-    while width >= min_width:
-        p = packing_for_width(width)
-        # print("Computed packing for width %s" % p.width)
-        width = p.width - 1
+    while depth >= min_depth:
+        p = packing_for_depth(depth)
+        p_depth = getattr(p, depth_attr)
+        # print("Computed packing for %s %s" % (depth_attr, p_depth))
+        depth = p_depth - 1
         packings.append(p)
     best = min(packings, key=operator.attrgetter('area'))
-    print("pack_rows: Best is width %s at area %s" %
-          (best.width, best.area))
+    print("pack_rows: Best is %s %s at area %s" %
+          (depth_attr, getattr(best, depth_attr), best.area))
     return best
 
 
-def write_packing(packing, filename):
-    with open(filename, 'w') as fp:
-        for image in packing.sprites:
-            fp.write(
-                ('<img src="{im.filename}" ' +
-                 'style="position:absolute;' +
-                 'left:{im.left}px;top:{im.top}px"/>\n').format(im=image))
+def small_length_reduction(sprites, length_attr, depth_attr):
+    key = operator.attrgetter(length_attr)
+    sprites = sorted(sprites, key=key)
+    by_length = [(k, list(vs))
+                 for k, vs in itertools.groupby(sprites, key=key)]
 
-
-def small_height_reduction(by_height):
     packings = []
-    for i in range(len(by_height)):
+    for i in range(len(by_length)):
         collapsed = []
         for j in range(i + 1):
-            collapsed += by_height[j][1]
-        collapsed_by_height = [(by_height[i][0], collapsed)] + by_height[i + 1:]
-        packing = pack_rows(collapsed_by_height)
-        print("Collapse all smaller than %s => %s" % (by_height[i][0], packing.area))
+            collapsed += by_length[j][1]
+        collapsed_by_length = ([(by_length[i][0], collapsed)] +
+                               by_length[i + 1:])
+        packing = pack_rows(collapsed_by_length, length_attr, depth_attr)
+        print("Collapse all smaller than %s => %s" %
+              (by_length[i][0], packing.area))
         packings.append(packing)
     best = min(packings, key=operator.attrgetter('area'))
-    print("small_height_reduction: Best is area %s" % (best.area,))
+    print("small_length_reduction: Best is area %s" % (best.area,))
     return best
-
-
-def and_the_transpose(f, sprites):
-    im_transpose = []
-    for im in sprites:
-        im_transpose.append(
-            InputImage(image=im.image, width=im.height, height=im.width))
-    p1 = f(histogram(sprites, 'height'))
-    p2 = f(histogram(im_transpose, 'height'))
-    if p1.area <= p2.area:
-        return p1
-    packing_transpose = []
-    for pim in p2.sprites:
-        im = InputImage(
-            image=pim.image, width=pim.height, height=pim.width)
-        pos = Position(top=pim.left, left=pim.top)
-        packing_transpose.append(PackedImage(im, pos))
-    return Packing(packing_transpose)
 
 
 def naive_packing(sprites):
-    images = [
-        InputImage(image=sprite, width=sprite.outer_width, height=sprite.outer_height)
-        for sprite in sprites
-    ]
-    packing = and_the_transpose(small_height_reduction, images)
+    p1 = small_length_reduction(sprites, 'outer_height', 'outer_width')
+    p2 = small_length_reduction(sprites, 'outer_width', 'outer_height')
+    packing = min(p1, p2, key=operator.attrgetter('area'))
     bd = 8
     meta = {"bitdepth": bd, "alpha": True}
     rows = [bytearray((packing.width * 4)) for i in range(packing.height)]
-    placements = []
-    for pim in packing.sprites:
-        placements.append(((pim.left, pim.top), pim.image))
-        pixel_rows = pim.image.im.pixels
+    placements = list(packing)
+    for (x, y), sprite in placements:
+        pixel_rows = sprite.im.pixels
         for i, pixels in enumerate(pixel_rows):
-            row = rows[pim.top + i - packing.top]
-            a1 = pim.left * 4
+            row = rows[y + i]
+            a1 = x * 4
             a2 = a1 + len(pixels)
             row[a1:a2] = pixels
     im = Image(packing.width, packing.height, rows, meta)
