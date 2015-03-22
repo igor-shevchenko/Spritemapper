@@ -82,8 +82,9 @@ def pack_rows(by_length, length_attr, depth_attr):
         depth = p_depth - 1
         packings.append(p)
     best = min(packings, key=operator.attrgetter('area'))
-    logger.debug("pack_rows: Best is %s %s at area %s",
-                 depth_attr, getattr(best, depth_attr), best.area)
+    logger.debug("Tried %s thresholds for %s between %s and %s; best is %s",
+                 len(packings), depth_attr, min_depth, max_depth,
+                 getattr(best, depth_attr))
     return best
 
 
