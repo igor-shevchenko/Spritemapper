@@ -26,9 +26,6 @@ class Packing(object):
                          for x, im in zip(self.xs, self.sprites))
         self.area = self.width * self.height
 
-    outer_width = property(lambda self: self.width)
-    outer_height = property(lambda self: self.height)
-
     def __iter__(self):
         return iter(zip(zip(self.xs, self.ys), self.sprites))
 
@@ -45,25 +42,45 @@ class Packing(object):
         return Image(self.width, self.height, rows, meta)
 
 
-def pack_rows(by_length, length_attr, depth_attr):
-    def bins_for_depth(depth):
+class SmallLengthReduction(object):
+    def pack(self, sprites):
+        sprites = sorted(sprites, key=self.get_length)
+        by_length_iter = itertools.groupby(sprites, key=self.get_length)
+        by_length = [(k, list(vs)) for k, vs in by_length_iter]
+
+        packings = []
+        for i in range(len(by_length)):
+            collapsed = []
+            for j in range(i + 1):
+                collapsed += by_length[j][1]
+            collapsed_by_length = ([(by_length[i][0], collapsed)] +
+                                   by_length[i + 1:])
+            packing = self.pack_rows(collapsed_by_length)
+            logger.debug("Collapse all smaller than %s => %s",
+                         by_length[i][0], packing.area)
+            packings.append(packing)
+        best = min(packings, key=operator.attrgetter('area'))
+        logger.info("small_length_reduction: Best is area %s", best.area)
+        return best
+
+    def bins_for_depth(self, by_length, depth):
         bins = []
         for length, ims in by_length:
             row = None
             rows = []
             row_depth = depth
             for im in ims:
-                if row_depth + getattr(im, depth_attr) > depth:
+                if row_depth + self.get_depth(im) > depth:
                     row = []
                     rows.append(row)
                     row_depth = 0
                 row.append(im)
-                row_depth += getattr(im, depth_attr)
+                row_depth += self.get_depth(im)
             bins.append((length, rows))
         return bins
 
-    def packing_for_depth(depth):
-        bins = bins_for_depth(depth)
+    def packing_for_depth(self, by_length, depth):
+        bins = self.bins_for_depth(by_length, depth)
         packing = []
         y = 0
         for length, rows in bins:
@@ -71,60 +88,82 @@ def pack_rows(by_length, length_attr, depth_attr):
                 x = 0
                 max_length = 0
                 for im in row:
-                    if 'height' in length_attr:
-                        placement = (x, y)
-                    else:
-                        placement = (y, x)
+                    placement = self.placement_tuple(depth=x, length=y)
                     packing.append((placement, im))
-                    max_length = max(max_length, getattr(im, length_attr))
-                    x += getattr(im, depth_attr)
+                    max_length = max(max_length, self.get_length(im))
+                    x += self.get_depth(im)
                 y += max_length
         return Packing(packing)
 
-    min_depth = max(getattr(im, depth_attr)
-                    for l, ims in by_length for im in ims)
-    max_depth = max(sum(getattr(im, depth_attr) for im in ims)
-                    for l, ims in by_length)
+    def pack_rows(self, by_length):
+        min_depth = max(self.get_depth(im)
+                        for l, ims in by_length for im in ims)
+        max_depth = max(sum(self.get_depth(im) for im in ims)
+                        for l, ims in by_length)
 
-    depth = max_depth
-    packings = []
-    while depth >= min_depth:
-        p = packing_for_depth(depth)
-        p_depth = getattr(p, depth_attr)
-        depth = p_depth - 1
-        packings.append(p)
-    best = min(packings, key=operator.attrgetter('area'))
-    logger.debug("Tried %s thresholds for %s between %s and %s; best is %s",
-                 len(packings), depth_attr, min_depth, max_depth,
-                 getattr(best, depth_attr))
-    return best
+        depth = max_depth
+        packings = []
+        while depth >= min_depth:
+            p = self.packing_for_depth(by_length, depth)
+            depth = self.get_packing_depth(p) - 1
+            packings.append(p)
+        best = min(packings, key=operator.attrgetter('area'))
+        logger.debug(
+            "%s: Tried %s depth thresholds between %s and %s; best is %s",
+            type(self).__name__, len(packings), min_depth, max_depth,
+            self.get_packing_depth(best))
+        return best
+
+    def get_length(self, im):
+        raise NotImplementedError
+
+    def get_depth(self, im):
+        raise NotImplementedError
+
+    def get_packing_depth(self, packing):
+        raise NotImplementedError
+
+    def placement_tuple(self, depth, length):
+        raise NotImplementedError
 
 
-def small_length_reduction(sprites, length_attr, depth_attr):
-    key = operator.attrgetter(length_attr)
-    sprites = sorted(sprites, key=key)
-    by_length = [(k, list(vs))
-                 for k, vs in itertools.groupby(sprites, key=key)]
+class SmallHeightReduction(SmallLengthReduction):
+    def get_length(self, im):
+        return im.outer_height
 
-    packings = []
-    for i in range(len(by_length)):
-        collapsed = []
-        for j in range(i + 1):
-            collapsed += by_length[j][1]
-        collapsed_by_length = ([(by_length[i][0], collapsed)] +
-                               by_length[i + 1:])
-        packing = pack_rows(collapsed_by_length, length_attr, depth_attr)
-        logger.debug("Collapse all smaller than %s => %s",
-                     by_length[i][0], packing.area)
-        packings.append(packing)
-    best = min(packings, key=operator.attrgetter('area'))
-    logger.info("small_length_reduction: Best is area %s", best.area)
-    return best
+    def get_depth(self, im):
+        return im.outer_width
+
+    def get_packing_depth(self, packing):
+        return packing.width
+
+    def placement_tuple(self, depth, length):
+        return (depth, length)
+
+
+class SmallWidthReduction(SmallLengthReduction):
+    def get_length(self, im):
+        return im.outer_width
+
+    def get_depth(self, im):
+        return im.outer_height
+
+    def get_packing_depth(self, packing):
+        return packing.height
+
+    def placement_tuple(self, depth, length):
+        return (length, depth)
 
 
 def naive_packing(sprites):
-    p1 = small_length_reduction(sprites, 'outer_height', 'outer_width')
-    p2 = small_length_reduction(sprites, 'outer_width', 'outer_height')
+    p1 = SmallHeightReduction().pack(sprites)
+    p2 = SmallWidthReduction().pack(sprites)
     packing = p1 if p1.area <= p2.area else p2
+    image_area = sum(sprite.outer_width * sprite.outer_height
+                     for sprite in sprites)
+    whitespace = packing.area - image_area
+    whitespace_fraction = 1.0 * whitespace / packing.area
+    logger.info("naive_packing: %d/%d: %.2f%% whitespace",
+                image_area, packing.area, 100 * whitespace_fraction)
     im = packing.render()
     return im, list(packing)
