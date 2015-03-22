@@ -125,6 +125,6 @@ def small_length_reduction(sprites, length_attr, depth_attr):
 def naive_packing(sprites):
     p1 = small_length_reduction(sprites, 'outer_height', 'outer_width')
     p2 = small_length_reduction(sprites, 'outer_width', 'outer_height')
-    packing = min(p1, p2, key=operator.attrgetter('area'))
+    packing = p1 if p1.area <= p2.area else p2
     im = packing.render()
     return im, list(packing)
