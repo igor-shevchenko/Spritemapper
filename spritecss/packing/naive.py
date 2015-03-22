@@ -110,20 +110,22 @@ def small_length_reduction(sprites, length_attr, depth_attr):
     return best
 
 
-def naive_packing(sprites):
-    p1 = small_length_reduction(sprites, 'outer_height', 'outer_width')
-    p2 = small_length_reduction(sprites, 'outer_width', 'outer_height')
-    packing = min(p1, p2, key=operator.attrgetter('area'))
-    bd = 8
-    meta = {"bitdepth": bd, "alpha": True}
+def render_packing(packing):
+    meta = {"bitdepth": 8, "alpha": True}
     rows = [bytearray((packing.width * 4)) for i in range(packing.height)]
-    placements = list(packing)
-    for (x, y), sprite in placements:
+    for (x, y), sprite in packing:
         pixel_rows = sprite.im.pixels
         for i, pixels in enumerate(pixel_rows):
             row = rows[y + i]
             a1 = x * 4
             a2 = a1 + len(pixels)
             row[a1:a2] = pixels
-    im = Image(packing.width, packing.height, rows, meta)
-    return im, placements
+    return Image(packing.width, packing.height, rows, meta)
+
+
+def naive_packing(sprites):
+    p1 = small_length_reduction(sprites, 'outer_height', 'outer_width')
+    p2 = small_length_reduction(sprites, 'outer_width', 'outer_height')
+    packing = min(p1, p2, key=operator.attrgetter('area'))
+    im = render_packing(list(packing))
+    return im, list(packing)
