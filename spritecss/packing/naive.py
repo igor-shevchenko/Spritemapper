@@ -169,3 +169,40 @@ def naive_packing(sprites):
                 image_area, packing.area, 100 * whitespace_fraction)
     im = packing.render()
     return im, list(packing)
+
+
+def main():
+    import os
+    import time
+    from spritecss.packing.sprites import open_sprites
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    d = '/ssd/home/work/imagemap/images'
+    f = [os.path.join(d, x)
+         for x in sorted(os.listdir(d))
+         if x.endswith('.png')]
+    with open_sprites(f, pad=(1, 1)) as sprites:
+        t1 = time.time()
+        im, placements = naive_packing(sprites)
+        t2 = time.time()
+        print("naive_packing took %.2f seconds" % (t2 - t1,))
+
+        with open('images.html', 'w') as fp:
+            fp.write('<!DOCTYPE html><html><head><meta charset="utf-8" />' +
+                     '<title>Naive sprite packing</title></head>\n')
+            fp.write('<body style="background-color:black">\n')
+            fp.write(('<div style="position:relative;width:%dpx;height:%dpx;' +
+                      'background-color:gray;overflow:hidden">\n') %
+                     (im.width, im.height))
+            for placement, image in placements:
+                fp.write(
+                    ('<img src="{im.fname}" ' +
+                     'style="position:absolute;' +
+                     'left:{left}px;top:{top}px"/>\n').format(
+                         im=image, left=placement[0], top=placement[1]))
+            fp.write('</div></body></html>\n')
+
+
+if __name__ == "__main__":
+    main()
