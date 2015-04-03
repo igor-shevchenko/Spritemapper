@@ -48,7 +48,7 @@ def get_background_url(val):
 
 def find_decl_background_url(decl):
     (prop, val) = split_declaration(decl)
-    if prop not in ("background", "background-image"):
+    if prop != "background":  # "background-image" support missing in replacer.py
         raise NoSpriteFound(decl)
     return get_background_url(val)
 
