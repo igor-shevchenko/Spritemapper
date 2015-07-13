@@ -384,6 +384,8 @@ class Whitespace(CSSParserEvent):
         self.whitespace = whitespace if whitespace else state.whitespace
 # }}}
 
+INLINE_AT_RULES = ('-ms-viewport', 'viewport', 'font-face')
+
 class CSSParser(EventStream):
     """An event stream of parser events."""
 
@@ -499,12 +501,16 @@ class CSSParser(EventStream):
             for tok in st.iter_tokens(("char", "w")):
                 st.at_rule += tok.value
         else:
+            if st.at_rule in INLINE_AT_RULES:
+                st.at_rule = ""
+                return st.leave()
+
             for tok in st.iter_tokens(("w",)):
                 st.at_rule += tok.value
 
             lex = st.lexeme
 
-            if lex == "block_end":
+            if lex == 'block_end':
                 self.push(BlockEnd(st))
                 st.at_rule = ""
                 return st.leave()
@@ -512,15 +518,18 @@ class CSSParser(EventStream):
             st = st.sub(self._handle_selector)
             return st.handler(st)
 
+        st.at_rule = st.at_rule.strip()
+
         lex = st.lexeme
 
-        if lex in ("block_begin", "semicolon"):
-            if lex == "block_begin":
-                self.push(AtBlock(st))
-                return st.sub(self._handle_selector)
-            elif lex == "semicolon":
-                self.push(AtStatement(st))
-                return st(handler=None, at_rule="")
+        if lex == "block_begin":
+            self.push(AtBlock(st))
+            if st.at_rule in INLINE_AT_RULES:
+                return st.sub(self._handle_declaration)
+            return st.sub(self._handle_selector)
+        elif lex == "semicolon":
+            self.push(AtStatement(st))
+            return st(handler=None, at_rule="")
         elif lex == "comment_begin":
             return st.sub(self._handle_comment)
         elif lex == "block_end":

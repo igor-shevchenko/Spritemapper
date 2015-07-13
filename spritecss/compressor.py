@@ -130,7 +130,7 @@ class SpritemapperFilter(FilterBase):
                 print("packing sprites in mapping %s" % (smap.fname,))
 
                 if conf.packer == 'annealing':
-                    print("annealing %s in steps of %d" % smap.fname, conf.anneal_steps)
+                    print("annealing %s in steps of %d" % (smap.fname, conf.anneal_steps))
                     packed = PackedBoxes(sprites, anneal_steps=conf.anneal_steps)
                     print_packed_size(packed)
                     sm_plcs.append((smap, packed.placements))
