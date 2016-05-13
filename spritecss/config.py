@@ -97,7 +97,7 @@ class CSSConfig(object):
 
     def get_spritemap_url(self, fname):
         "Get output image URL for spritemap *fname*."
-        return self.absurl(path.relpath(fname, self.root))
+        return self.absurl(path.relpath(fname, self.root)).replace('\\', '/')
 
     def get_css_out(self, fname):
         "Get output image filename for spritemap directory *fname*."
